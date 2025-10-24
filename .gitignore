@@ -1,0 +1,7 @@
+.python-version
+/data
+/notebooks/data
+/model/data/*
+.vscode
+/config
+*__pycache__*
