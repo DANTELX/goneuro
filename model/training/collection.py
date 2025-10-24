@@ -27,19 +27,41 @@ class DataCollector:
         self._dataset_data_path.mkdir(exist_ok=True)
         self._data_lists_path.mkdir(exist_ok=True)
 
-    def _download_file(self, url, output_path):
+    def _download_file(self, url, output_path, progress=None, task_msg=""):
         url_parsed = urlparse(url)
         filename = Path(url_parsed.path).name
-        output_path = self._output_data_path / output_path / filename
+        dest_path = self._output_data_path / output_path / filename
 
         with requests.get(url, stream=True) as r:
             r.raise_for_status()
-            with open(output_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
 
-        return output_path
+            # Try to get total size for progress bar (may be None)
+            total = None
+            try:
+                total_header = r.headers.get("Content-Length")
+                if total_header:
+                    total = int(total_header)
+            except Exception:
+                total = None
+
+            # Setup progress/task if requested
+            if progress is not None:
+                task = progress.add_task(task_msg, total=total)
+
+            # Stream and write chunks, updating progress if provided
+            with open(dest_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    if progress is not None and task is not None:
+                        try:
+                            progress.update(task, advance=len(chunk))
+                        except Exception:
+                            # ignore progress errors to not break download
+                            pass
+
+        return dest_path
 
     def _uncompress_gz(self, input_path):
         input_path = self._output_data_path / input_path
@@ -133,7 +155,9 @@ class DataCollector:
         self.update_db()
         return True
 
-    def download_dataset(self, base_url, path, dataset_dir_name):
+    def download_dataset(
+        self, base_url, path, dataset_dir_name, progress=None, task_msg=""
+    ):
         path = path.strip()
         base_url = base_url.strip()
         url = base_url + path
@@ -143,7 +167,6 @@ class DataCollector:
             raise Exception(f"Dataset does not exist ({dataset_dir_name})")
 
         dataset_file_id = self.check_url(url, base_url)["list_file_stem"]
-        print(f"id: {dataset_file_id}")
         if not dataset_file_id:
             raise Exception(f"Url is not valid ({url})")
 
@@ -158,7 +181,9 @@ class DataCollector:
             return
 
         # Download dataset
-        download_path = self._download_file(url, dataset_output_path)
+        download_path = self._download_file(
+            url, dataset_output_path, progress, task_msg
+        )
 
         # Rename file with id
         new_path = dataset_output_path / (dataset_file_id + download_path.suffix)
@@ -173,6 +198,16 @@ class DataCollector:
                     return dataset_files
 
         return False
+
+    def remove_dataset_file(self, dataset_id, file_id):
+        file_path = self._dataset_data_path / dataset_id / (file_id + ".parquet")
+
+        if not file_path.exists():
+            raise Exception(f"Invalid file or dataset id ({file_path})")
+
+        file_path.unlink()
+        self.update_db()
+        return True
 
     def downloaded_dataset_files(self, dataset_id):
         dataset_id_path = self._dataset_data_path / dataset_id

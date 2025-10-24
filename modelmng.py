@@ -92,7 +92,7 @@ class Modelmgr:
             sys.exit(1)
 
     def collect(self):
-        options = ["ADD", "REMOVE", "INSPECT", "MANAGE", "EDIT", "RETURN"]
+        options = ["ADD", "REMOVE", "INSPECT", "MANAGE", "RETURN"]
 
         data_dir_path_abs = pathtr(model_config.json["data_struct_paths"]["raw_data"])
         data_collector = DataCollector(data_dir_path_abs)
@@ -328,8 +328,8 @@ class Modelmgr:
 
                     number_downloaded = number_to_download
                     with Progress() as progress:
-                        task = progress.add_task(
-                            "Downloading", total=number_to_download
+                        overall_progress = progress.add_task(
+                            "Progress", total=number_to_download
                         )
                         for path in data_list_paths:
                             if number_downloaded == 0:
@@ -342,13 +342,24 @@ class Modelmgr:
 
                             if file_id in data_list_ids_missing:
                                 # Download
+                                task_msg = f"Downloading {file_id} ({file_size} bytes)"
                                 data_collector.download_dataset(
-                                    base_url, path, dataset_dir
+                                    base_url, path, dataset_dir, progress, task_msg
                                 )
-                                progress.update(task, advance=1)
+                                progress.update(overall_progress, advance=1)
+                                number_downloaded -= 1
 
                 case "delete":
-                    print("del")
+                    number_to_delete = int(
+                        inquirer.text(
+                            f"Number of files to delete (1 - {len(data_list_ids_downloaded)}):",
+                            validate=NumberValidator(1, len(data_list_ids_downloaded)),
+                            mandatory=True,
+                        ).execute()
+                    )
+                    for i in range(number_to_delete):
+                        file_id = data_list_ids_downloaded[i]
+                        data_collector.remove_dataset_file(dataset_dir, file_id)
 
         actions = {
             "ADD": add_dataset,
