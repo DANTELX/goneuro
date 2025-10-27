@@ -72,7 +72,7 @@ class Modelmgr:
             console.print("[*] Created missing directories", style="info")
 
     def _menu(self):
-        menu_options = ["COLLECT", "PREPROCESS", "TRAIN", "QUIT"]
+        menu_options = ["COLLECT", "PREPROCESS", "TRAIN", "INTERFACE", "QUIT"]
         try:
             while True:
                 action = inquirer.select(
